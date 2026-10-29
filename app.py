@@ -1,118 +1,176 @@
 import streamlit as st
 import pandas as pd
 
-st.set_page_config(page_title="Order-to-Cash | Exception Control", page_icon="📦", layout="wide")
-st.title("📦 Order-to-Cash — Sales Order Exception Control")
-st.caption("RedEarth Minerals | SAP S/4HANA concept prototype | Sample data only")
+# ---------------- PAGE CONFIG ----------------
+st.set_page_config(
+    page_title="Order to Cash - Exception Control",
+    page_icon="📦",
+    layout="wide"
+)
 
-SAMPLE_DATA = [
-    {"Sales Order":"SO1001","Customer":"ABC Industries","Exception":"Credit Limit","Priority":"High","Status":"Pending","Amount (£)":92500,"Days Open":4,"Owner":"Credit Team"},
-    {"Sales Order":"SO1002","Customer":"XYZ Mining","Exception":"Pricing Error","Priority":"Medium","Status":"Pending","Amount (£)":18700,"Days Open":2,"Owner":"Sales Operations"},
-    {"Sales Order":"SO1003","Customer":"Global Minerals","Exception":"Stock Shortage","Priority":"High","Status":"Resolved","Amount (£)":46300,"Days Open":0,"Owner":"Warehouse"},
-    {"Sales Order":"SO1004","Customer":"Prime Steel","Exception":"Credit Limit","Priority":"High","Status":"Pending","Amount (£)":71200,"Days Open":6,"Owner":"Credit Team"},
-    {"Sales Order":"SO1005","Customer":"Nova Metals","Exception":"Delivery Delay","Priority":"Medium","Status":"Pending","Amount (£)":28900,"Days Open":3,"Owner":"Logistics"},
-    {"Sales Order":"SO1006","Customer":"Apex Ltd","Exception":"Pricing Error","Priority":"Low","Status":"Resolved","Amount (£)":8400,"Days Open":0,"Owner":"Sales Operations"},
-    {"Sales Order":"SO1007","Customer":"Eastern Corp","Exception":"Stock Shortage","Priority":"High","Status":"Pending","Amount (£)":55800,"Days Open":8,"Owner":"Warehouse"},
-    {"Sales Order":"SO1008","Customer":"BlueRock","Exception":"Credit Limit","Priority":"Medium","Status":"Pending","Amount (£)":31700,"Days Open":1,"Owner":"Credit Team"},
-]
+# ---------------- DATA ----------------
+data = {
+    "Sales Order": ["SO1001", "SO1002", "SO1003", "SO1004", "SO1005",
+                    "SO1006", "SO1007", "SO1008"],
+    "Customer": ["ABC Industries", "XYZ Mining", "Global Minerals",
+                 "Prime Steel", "Nova Metals", "Apex Ltd",
+                 "Eastern Corp", "BlueRock"],
+    "Exception": ["Credit Limit", "Pricing Error", "Stock Shortage",
+                  "Credit Limit", "Delivery Delay", "Pricing Error",
+                  "Stock Shortage", "Credit Limit"],
+    "Priority": ["High", "Medium", "High", "High",
+                 "Medium", "Low", "High", "Medium"],
+    "Status": ["Pending", "Pending", "Resolved", "Pending",
+               "Pending", "Resolved", "Pending", "Pending"]
+}
 
-if "orders" not in st.session_state:
-    st.session_state.orders = pd.DataFrame(SAMPLE_DATA)
-if "action_log" not in st.session_state:
-    st.session_state.action_log = []
+df = pd.DataFrame(data)
 
-df = st.session_state.orders
-st.subheader("📊 Exception Control Dashboard")
-open_mask = df["Status"].eq("Pending")
-k1,k2,k3,k4,k5 = st.columns(5)
-k1.metric("Total Orders", len(df))
-k2.metric("Open Exceptions", int(open_mask.sum()))
-k3.metric("Resolved", int(df["Status"].eq("Resolved").sum()))
-k4.metric("High Priority Open", int((df["Priority"].eq("High") & open_mask).sum()))
-k5.metric("Open Value Exposure", f"£{df.loc[open_mask, 'Amount (£)'].sum():,.0f}")
-
-st.divider()
-st.subheader("🔎 Exception Queue")
-f1,f2,f3,f4 = st.columns(4)
-with f1: pf = st.selectbox("Priority", ["All","High","Medium","Low"])
-with f2: sf = st.selectbox("Status", ["All","Pending","Resolved"])
-with f3: ef = st.selectbox("Exception type", ["All"] + sorted(df["Exception"].unique().tolist()))
-with f4: search = st.text_input("Search order/customer", placeholder="e.g. SO1001 or ABC")
-
-filtered = df.copy()
-if pf != "All": filtered = filtered[filtered["Priority"] == pf]
-if sf != "All": filtered = filtered[filtered["Status"] == sf]
-if ef != "All": filtered = filtered[filtered["Exception"] == ef]
-if search.strip():
-    q = search.strip().lower()
-    filtered = filtered[filtered["Sales Order"].str.lower().str.contains(q) | filtered["Customer"].str.lower().str.contains(q)]
-
-cols = ["Sales Order","Customer","Exception","Priority","Status","Amount (£)","Days Open","Owner"]
-st.dataframe(filtered[cols], use_container_width=True, hide_index=True)
-st.caption(f"Showing {len(filtered)} of {len(df)} orders.")
-st.download_button("⬇️ Download filtered queue (CSV)", filtered[cols].to_csv(index=False).encode("utf-8"),
-                   file_name="o2c_exception_queue.csv", mime="text/csv")
+# ---------------- HEADER ----------------
+st.title("📦 Order to Cash – Sales Order Exception Control")
+st.caption(
+    "RedEarth Minerals | SAP S/4HANA | Sales Order Exception Management"
+)
 
 st.divider()
-st.subheader("🎯 Sales Order Decision Panel")
-if filtered.empty:
-    st.info("No orders match these filters. Change one or more filters.")
-else:
-    selected = st.selectbox("Select an order to review", filtered["Sales Order"].tolist())
-    idx = st.session_state.orders.index[st.session_state.orders["Sales Order"].eq(selected)][0]
-    row = st.session_state.orders.loc[idx]
-    left,right = st.columns(2)
-    with left:
-        st.markdown("#### Order details")
-        st.write(f"**Sales order:** {row['Sales Order']}")
+
+# ---------------- DYNAMIC KPIs ----------------
+st.markdown("### 📊 Exception Control Dashboard")
+
+total_orders = len(df)
+total_exceptions = len(df[df["Status"] == "Pending"])
+pending = len(df[df["Status"] == "Pending"])
+resolved = len(df[df["Status"] == "Resolved"])
+
+high_priority = len(
+    df[(df["Priority"] == "High") & (df["Status"] == "Pending")]
+)
+
+col1, col2, col3, col4 = st.columns(4)
+
+col1.metric("Total Orders", total_orders)
+col2.metric("Open Exceptions", total_exceptions)
+col3.metric("Resolved", resolved)
+col4.metric("High Priority", high_priority)
+
+st.divider()
+
+# ---------------- FILTERS ----------------
+st.markdown("### 🔎 Exception Queue")
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    priority_filter = st.selectbox(
+        "Priority",
+        ["All", "High", "Medium", "Low"]
+    )
+
+with col2:
+    status_filter = st.selectbox(
+        "Status",
+        ["All", "Pending", "Resolved"]
+    )
+
+with col3:
+    exception_filter = st.selectbox(
+        "Exception Type",
+        ["All"] + sorted(df["Exception"].unique().tolist())
+    )
+
+filtered_df = df.copy()
+
+if priority_filter != "All":
+    filtered_df = filtered_df[
+        filtered_df["Priority"] == priority_filter
+    ]
+
+if status_filter != "All":
+    filtered_df = filtered_df[
+        filtered_df["Status"] == status_filter
+    ]
+
+if exception_filter != "All":
+    filtered_df = filtered_df[
+        filtered_df["Exception"] == exception_filter
+    ]
+
+st.dataframe(
+    filtered_df,
+    use_container_width=True,
+    hide_index=True
+)
+
+st.divider()
+
+# ---------------- DECISION PANEL ----------------
+st.markdown("### 🎯 Sales Order Decision Panel")
+
+if len(filtered_df) > 0:
+
+    selected_order = st.selectbox(
+        "Select Sales Order to Review",
+        filtered_df["Sales Order"].tolist()
+    )
+
+    row = df[df["Sales Order"] == selected_order].iloc[0]
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.write(f"**Sales Order:** {row['Sales Order']}")
         st.write(f"**Customer:** {row['Customer']}")
         st.write(f"**Exception:** {row['Exception']}")
-        st.write(f"**Owner:** {row['Owner']}")
-    with right:
-        st.markdown("#### Current position")
+
+    with col2:
         st.write(f"**Priority:** {row['Priority']}")
         st.write(f"**Status:** {row['Status']}")
-        st.write(f"**Days open:** {row['Days Open']}")
-        st.write(f"**Amount:** £{row['Amount (£)']:,.2f}")
 
-    # Transparent rules, not machine-learning AI.
+    # ---------------- DECISION LOGIC ----------------
     if row["Status"] == "Resolved":
-        decision, recommendation = "Resolved", "No immediate action required. Retain resolution evidence for audit."
-        reason = "This order is already marked as resolved in the demo data."
+        recommendation = "No immediate action required."
+        decision = "Resolved"
     elif row["Priority"] == "High":
-        decision, recommendation = "Escalate / urgent review", "Contact the responsible team, verify the evidence, and resolve or escalate before proceeding where required."
-        reason = f"Pending exception with High priority: {row['Exception']}."
-    elif int(row["Days Open"]) >= 5:
-        decision, recommendation = "Review ageing", "Ask the assigned owner for an update and agree a target resolution time."
-        reason = f"The pending case has been open for {row['Days Open']} days."
+        recommendation = (
+            "Urgent attention required. Review the exception "
+            "and resolve it before order processing continues."
+        )
+        decision = "Escalate"
     else:
-        decision, recommendation = "Review with owner", "Validate order details and assign the next action to the responsible team."
-        reason = f"Pending exception with {row['Priority']} priority."
-    st.info(f"**Suggested decision: {decision}**\n\n{recommendation}\n\n**Reason:** {reason}")
-    st.caption("This is transparent, rule-based decision support. A person must validate the case before taking business action.")
+        recommendation = (
+            "Review the exception and assign the appropriate "
+            "team for resolution."
+        )
+        decision = "Review"
 
-    b1,b2,b3 = st.columns(3)
-    with b1:
-        if st.button("✅ Mark as resolved", use_container_width=True, disabled=(row["Status"] == "Resolved")):
-            st.session_state.orders.loc[idx, "Status"] = "Resolved"
-            st.session_state.orders.loc[idx, "Days Open"] = 0
-            st.session_state.action_log.append({"Time":pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S"),"Sales Order":selected,"Action":"Marked as resolved","Note":"Demo action; not written back to SAP"})
-            st.rerun()
-    with b2:
-        if st.button("🚨 Escalate", use_container_width=True, disabled=(row["Status"] == "Resolved")):
-            st.session_state.action_log.append({"Time":pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S"),"Sales Order":selected,"Action":"Escalated","Note":f"Suggested escalation for {row['Priority']} priority {row['Exception']} exception"})
-            st.warning("Escalation recorded in this demo session. No real notification was sent.")
-    with b3:
-        if st.button("↩️ Reset demo data", use_container_width=True):
-            st.session_state.orders = pd.DataFrame(SAMPLE_DATA)
-            st.session_state.action_log = []
-            st.rerun()
+    st.markdown("#### 🤖 AI Decision Recommendation")
 
-st.divider()
-st.subheader("🧾 Demo Action Log")
-if st.session_state.action_log:
-    st.dataframe(pd.DataFrame(st.session_state.action_log), use_container_width=True, hide_index=True)
+    st.info(
+        f"**Decision: {decision}**\n\n"
+        f"{recommendation}\n\n"
+        f"Reason: {row['Exception']} exception with "
+        f"{row['Priority']} priority."
+    )
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button("✅ Mark Complete"):
+            st.success(
+                f"{selected_order} marked for completion."
+            )
+
+    with col2:
+        if st.button("🚨 Escalate"):
+            st.warning(
+                f"{selected_order} escalated to the responsible team."
+            )
+
 else:
-    st.caption("No actions recorded yet in this session.")
+    st.warning("No orders match the selected filters.")
+
 st.divider()
-st.caption("Limitations: sample data only; no authentication, database persistence, live SAP/OData integration, real notifications, approval workflow, or production security.")
+
+st.caption(
+    "Decision Support Cockpit | SAP S/4HANA | Order-to-Cash"
+)
